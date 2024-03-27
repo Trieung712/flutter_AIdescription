@@ -1,11 +1,16 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:google_generative_ai/google_generative_ai.dart';
+import 'package:translator/translator.dart';
 
-void main() => runApp(MyApp());
+
+void main() async {
+  await dotenv.load(fileName: ".env");
+  runApp(MyApp());
+}
 
 class MyApp extends StatelessWidget {
+  const MyApp({super.key});
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -31,76 +36,120 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
   String organization = '';
   String experience = '';
   String additionalDescription = '';
-  String generatedDescription = '';
-  String answer = ''; // Biến để lưu trữ kết quả từ API
+  String? description; // Chuyển biến description thành kiểu String?
 
+  Future<String?> generateDescription(String prompt) async {
+    final model =
+    GenerativeModel(model: 'gemini-pro', apiKey: dotenv.env['API_KEY']!);
+
+    final content = [Content.text(prompt)];
+    final response = await model.generateContent(content);
+
+    if (response.text != null) {
+      return response.text!;
+    } else {
+      throw Exception('Failed to generate description');
+    }
+  }
+  Future<String?> translateToEnglish(String text) async {
+    final translator = GoogleTranslator();
+    Translation translation = await translator.translate(text, to: 'en');
+    return translation.text;
+  }
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: Text('User Info'),
       ),
-      body: Padding(
-        padding: EdgeInsets.all(16.0),
-        child: SingleChildScrollView(
+      body: SingleChildScrollView(
+        child: Padding(
+          padding: EdgeInsets.all(16.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
-              _buildUserInfoField('Name', name, (value) {
-                setState(() {
-                  name = value;
-                });
-              }),
-              SizedBox(height: 20),
-              _buildUserInfoField('Email', email, (value) {
-                setState(() {
-                  email = value;
-                });
-              }),
-              SizedBox(height: 20),
-              _buildUserInfoField('Date of Birth', dob, (value) {
-                setState(() {
-                  dob = value;
-                });
-              }),
-              SizedBox(height: 20),
-              _buildUserInfoField('Profession', profession, (value) {
-                setState(() {
-                  profession = value;
-                });
-              }),
-              SizedBox(height: 20),
-              _buildUserInfoField('Organization', organization, (value) {
-                setState(() {
-                  organization = value;
-                });
-              }),
-              SizedBox(height: 20),
-              _buildUserInfoField('Experience', experience, (value) {
-                setState(() {
-                  experience = value;
-                });
-              }),
-              SizedBox(height: 20),
-              _buildUserInfoField(
-                  'Additional Description', additionalDescription, (value) {
-                setState(() {
-                  additionalDescription = value;
-                });
-              }),
-              SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: () {
-                  _generateDescription('Flutter là gì?');
+              TextField(
+                decoration: InputDecoration(
+                  labelText: 'Name',
+                ),
+                maxLines: null,
+                onChanged: (value) {
+                  setState(() {
+                    name = value;
+                  });
                 },
-                child: Text('Generate Description'),
               ),
               SizedBox(height: 20),
-              generatedDescription.isEmpty
-                  ? Container()
-                  : Text(
-                'Generated Description: $generatedDescription',
-                style: TextStyle(fontWeight: FontWeight.bold),
+              TextField(
+                decoration: InputDecoration(
+                  labelText: 'Email',
+                ),
+                maxLines: null,
+                onChanged: (value) {
+                  setState(() {
+                    email = value;
+                  });
+                },
+              ),
+              SizedBox(height: 20),
+              TextField(
+                decoration: InputDecoration(
+                  labelText: 'Date of Birth',
+                ),
+                maxLines: null,
+                onChanged: (value) {
+                  setState(() {
+                    dob = value;
+                  });
+                },
+              ),
+              SizedBox(height: 20),
+              TextField(
+                decoration: InputDecoration(
+                  labelText: 'Profession',
+                ),
+                maxLines: null,
+                onChanged: (value) {
+                  setState(() {
+                    profession = value;
+                  });
+                },
+              ),
+              SizedBox(height: 20),
+              TextField(
+                decoration: InputDecoration(
+                  labelText: 'Organization',
+                ),
+                maxLines: null,
+                onChanged: (value) {
+                  setState(() {
+                    organization = value;
+                  });
+                },
+              ),
+              SizedBox(height: 20),
+              TextField(
+                decoration: InputDecoration(
+                  labelText: 'Experience',
+                ),
+                maxLines: null,
+                onChanged: (value) {
+                  setState(() {
+                    experience = value;
+                  });
+                },
+              ),
+              SizedBox(height: 20),
+              TextField(
+                decoration: InputDecoration(
+                  labelText: 'Additional Description',
+                ),
+                maxLines: null,
+                onChanged: (value) {
+                  setState(() {
+                    additionalDescription = value;
+                  });
+                },
               ),
               SizedBox(height: 20),
               ElevatedButton(
@@ -121,7 +170,8 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                             Text('Organization: $organization'),
                             Text('Experience: $experience'),
                             Text(
-                                'Additional Description: $additionalDescription'),
+                                'Additional Description: ''$additionalDescription'),
+
                           ],
                         ),
                         actions: <Widget>[
@@ -139,84 +189,118 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                 child: Text('Show Info'),
               ),
               SizedBox(height: 20),
-              TextField(
-                controller: TextEditingController(text: answer),
-                readOnly: true,
-                decoration: InputDecoration(
-                  labelText: 'Answer',
-                  border: OutlineInputBorder(),
-                ),
+              ElevatedButton(
+                onPressed: () async {
+                  try {
+                    String prompt =
+                        'Tôi là một "$profession" với "$experience" kinh nghiệm làm việc ở "$organization".giúp tôi tạo 3 mô tả ngắn gọn về công việc của mình'
+                    'mỗi mô tả không quá 15 từ'
+                        ; // Câu hỏi để tạo mô tả.
+                    String? generatedDescription =
+                    await generateDescription(prompt); // Sửa kiểu dữ liệu ở đây
+
+                    setState(() {
+                      additionalDescription = generatedDescription ?? '';
+                    });
+
+                    showDialog(
+                      context: context,
+                      builder: (context) {
+                        return AlertDialog(
+                          title: Text('Generated Description'),
+                          content: SingleChildScrollView(
+                            // Thêm SingleChildScrollView ở đây
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: <Widget>[
+                                TextField(
+                                  readOnly: true,
+                                  controller: TextEditingController(
+                                      text: generatedDescription),
+                                  maxLines: null,
+                                ),
+                                SizedBox(height: 10),
+                                ElevatedButton(
+                                  onPressed: () async {
+                                    String? englishDescription = await translateToEnglish(generatedDescription!);
+                                    Navigator.pop(context);
+                                    showDialog(
+                                      context: context,
+                                      builder: (context) {
+                                        return AlertDialog(
+                                          title: Text('English Description'),
+                                          content: SingleChildScrollView(
+                                            child: Column(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: <Widget>[
+                                                Text(englishDescription ?? ''),
+                                              ],
+                                            ),
+                                          ),
+                                          actions: <Widget>[
+                                            ElevatedButton(
+                                              onPressed: () {
+                                                setState(() {
+                                                  additionalDescription =
+                                                      englishDescription ?? '';
+                                                });
+                                                Navigator.pop(context);
+                                              },
+                                              child: Text('OK'),
+                                            ),
+                                          ],
+                                        );
+                                      },
+                                    );
+                                  },
+                                  child: Text('Translate to English'),
+                                ),
+                              ],
+                            ),
+                          ),
+                          actions: <Widget>[
+                            ElevatedButton(
+                              onPressed: () {
+                                setState(() {
+                                  additionalDescription = generatedDescription ?? '';
+                                });
+                                Navigator.pop(context);
+                              },
+                              child: Text('OK'),
+                            ),
+                          ],
+                        );
+                      },
+                    );
+                  } catch (e) {
+                    print('Failed to generate description: $e');
+                    showDialog(
+                      context: context,
+                      builder: (context) {
+                        return AlertDialog(
+                          title: Text('Error'),
+                          content: Text('Failed to generate description.'),
+                          actions: <Widget>[
+                            ElevatedButton(
+                              onPressed: () {
+                                Navigator.pop(context);
+                              },
+                              child: Text('Close'),
+                            ),
+                          ],
+                        );
+                      },
+                    );
+                  }
+                },
+                child: Text('Create Description'),
               ),
+
             ],
           ),
         ),
       ),
     );
   }
-
-  Widget _buildUserInfoField(String label, String value,
-      Function(String) onChanged) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 16,
-          ),
-        ),
-        SizedBox(height: 5),
-        Container(
-          decoration: BoxDecoration(
-            border: Border.all(color: Colors.grey),
-            borderRadius: BorderRadius.circular(5),
-          ),
-          child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            child: TextField(
-              onChanged: onChanged,
-              decoration: InputDecoration(
-                hintText: 'Enter $label',
-                border: InputBorder.none,
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Future<void> _generateDescription(String prompt) async {
-    var headers = {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer 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',
-    };
-    var body = {
-      'prompt': prompt,
-      'max_tokens': 50,
-      'temperature': 0.7,
-      'model': 'gpt-3.5-turbo-1106'
-    };
-    var response = await http.post(
-      Uri.parse('https://api.openai.com/v1/completions'),
-      headers: headers,
-      body: json.encode(body),
-    );
-    if (response.statusCode == 200) {
-      final responseData = json.decode(response.body);
-      setState(() {
-        generatedDescription = responseData['choices'][0]['text'];
-        answer = generatedDescription; // Cập nhật giá trị của answer ở đây
-      });
-    } else {
-      print('Failed to connect to OpenAI. Status code: ${response.statusCode}');
-      print('Response body: ${response.body}');
-      throw Exception('Failed to load description');
-    }
-  }
-
-
-
-
 }
+
